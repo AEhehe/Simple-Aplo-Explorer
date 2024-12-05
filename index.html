@@ -116,167 +116,217 @@
             text-decoration: underline;
         }
 
+        #loadingMessage {
+            display: none;
+            text-align: center;
+            font-size: 18px;
+            color: #2d3748;
+        }
+
+        .transaction-item {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 
 <body>
 
-    <header>
-        <h1>Ethereum Block Explorer</h1>
-    </header>
+<header>
+    <h1>Aplo Block Explorer</h1>
+</header>
 
-    <div class="container">
-        <!-- Search Bar Section -->
-        <div class="search-bar">
-            <input type="text" id="addressInput" placeholder="Enter Ethereum Address or Transaction Hash" />
-            <button id="fetchBalanceBtn" disabled>Search</button>
-        </div>
-
-        <!-- Results Section -->
-        <div class="result" id="result"></div>
+<div class="container">
+    <!-- Search Bar Section -->
+    <div class="search-bar">
+        <input type="text" id="addressInput" placeholder="Enter Ethereum Address" />
+        <button id="fetchBalanceBtn" disabled>Search</button>
     </div>
 
-    <div class="footer">
-        <p>Powered by <a href="https://aplocoin.com" target="_blank">AploCoin</a>. Ethereum Block Explorer</p>
-    </div>
+    <!-- Loading message -->
+    <div id="loadingMessage">Loading, please wait...</div>
 
-    <!-- Include ethers.js library -->
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.0/dist/ethers.umd.min.js"></script>
+    <!-- Results Section -->
+    <div class="result" id="result"></div>
+</div>
 
-    <script>
-        let provider;
+<div class="footer">
+    <p>Powered by <a href="https://aplocoin.com">AploCoin</a>. AploCoin Explorer</p>
+</div>
 
-        // Single ERC-20 token contract details
-        const tokenContract = {
-            name: 'Gaplo',
-            symbol: 'GAPLO',
-            address: '0x0000000000000000000000000000000000001234', // Replace with the correct token contract address
-            decimals: 18
-        };
+<!-- Include ethers.js library -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.0/dist/ethers.umd.min.js"></script>
 
-        // Initialize the provider
-        async function initializeProvider() {
+<script>
+    let provider;
+
+    // Initialize the provider
+    async function initializeProvider() {
+        try {
+            if (typeof ethers === 'undefined') {
+                console.error("ethers.js not loaded");
+                alert("ethers.js not loaded");
+                return;
+            }
+
+            console.log("Initializing provider...");
+            provider = new ethers.providers.JsonRpcProvider('https://pub1.aplocoin.com'); // Custom RPC URL
+            console.log("Provider initialized successfully.");
+
+            // Enable the search button once provider is ready
+            document.getElementById('fetchBalanceBtn').disabled = false;
+        } catch (error) {
+            console.error("Error initializing provider:", error);
+            alert("Error initializing provider: " + error.message);
+        }
+    }
+
+    // Wait until window is fully loaded
+    window.onload = async () => {
+        console.log("Window loaded. Initializing provider...");
+        await initializeProvider();
+    };
+
+    // Function to fetch wallet balance and last 5 transactions
+    async function fetchBalance() {
+        const input = document.getElementById('addressInput').value;
+        const address = input.trim();
+
+        if (!address) {
+            alert('Please enter a valid Ethereum address.');
+            return;
+        }
+
+        if (ethers.utils.isAddress(address)) {
+            // Show the loading message
+            document.getElementById('loadingMessage').style.display = 'block';
+            
             try {
-                if (typeof ethers === 'undefined') {
-                    console.error("ethers.js not loaded");
-                    alert("ethers.js not loaded");
-                    return;
-                }
-
-                console.log("Initializing provider...");
-                provider = new ethers.providers.JsonRpcProvider('https://pub1.aplocoin.com');
-                console.log("Provider initialized successfully.");
-
-                // Enable the search button once provider is ready
-                document.getElementById('fetchBalanceBtn').disabled = false;
+                await fetchWalletBalance(address);
+                await fetchGaploTokenBalance(address);
+                await fetchLastTransactions(address);
             } catch (error) {
-                console.error("Error initializing provider:", error);
-                alert("Error initializing provider: " + error.message);
+                console.error("Error during data fetch:", error);
+                document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
+            } finally {
+                // Hide the loading message after fetching the data
+                document.getElementById('loadingMessage').style.display = 'none';
+            }
+        } else {
+            alert('Invalid address format.');
+        }
+    }
+
+    // Function to fetch wallet balance (ETH)
+    async function fetchWalletBalance(address) {
+        if (!provider) {
+            alert('Provider not initialized yet');
+            return;
+        }
+
+        try {
+            const ethBalance = await provider.getBalance(address);
+            const formattedEthBalance = ethers.utils.formatEther(ethBalance);
+
+            // Display ETH balance
+            document.getElementById('result').innerHTML = `
+                <p><span class="label">Wallet Address:</span> <a href="https://explorer.aplocoin.com/account/${address}" target="_blank" class="address-link">${address}</a></p>
+                <p><span class="label">Balance:</span> ${formattedEthBalance} GAPLO</p>
+                <h3><span class="label">APLO Token Balance:</span></h3>
+                <p id="gaplo-balance">Loading...</p>
+                <h3><span class="lavel">Last 5 Transactions:</span></h3>
+                <ul id="transaction-list">Loading...</ul>
+            `;
+        } catch (error) {
+            console.error("Error fetching balance:", error);
+            document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
+        }
+    }
+
+    // Function to fetch the last 5 transactions of the wallet address with an extended range
+    async function fetchLastTransactions(address) {
+        const latestBlockNumber = await provider.getBlockNumber(); // Get latest block number
+        const txCount = 5; // Number of transactions to fetch
+        const blocksToSearch = 50; // Increase the block range to search more blocks
+        
+        let transactions = [];
+        let startBlock = latestBlockNumber;
+
+        // Fetch transactions from more blocks (increase this number for larger range)
+        for (let i = 0; i < blocksToSearch; i++) {
+            const block = await provider.getBlockWithTransactions(startBlock);
+            
+            block.transactions.forEach(tx => {
+                if (tx.from.toLowerCase() === address.toLowerCase() || tx.to.toLowerCase() === address.toLowerCase()) {
+                    transactions.push(tx);
+                }
+            });
+
+            // Move to previous block
+            startBlock--;
+        }
+
+        // If we still don't have enough transactions, continue searching for older blocks
+        if (transactions.length < txCount) {
+            for (let i = blocksToSearch; i < 20; i++) {
+                const block = await provider.getBlockWithTransactions(startBlock);
+                block.transactions.forEach(tx => {
+                    if (tx.from.toLowerCase() === address.toLowerCase() || tx.to.toLowerCase() === address.toLowerCase()) {
+                        transactions.push(tx);
+                    }
+                });
+                startBlock--;
+                if (transactions.length >= txCount) break;
             }
         }
 
-        // Wait until window is fully loaded
-        window.onload = async () => {
-            console.log("Window loaded. Initializing provider...");
-            await initializeProvider();
-        };
+        // Display transactions
+        displayTransactions(transactions.slice(0, txCount)); // Limit to the last 5 transactions
+    }
 
-        // Function to fetch wallet balance
-        async function fetchBalance() {
-            const input = document.getElementById('addressInput').value;
-            const addressOrTxHash = input.trim();
+    // Function to display the transactions in the UI
+    function displayTransactions(transactions) {
+        const transactionList = document.getElementById('transaction-list');
+        transactionList.innerHTML = ''; // Clear any previous transactions
 
-            if (!addressOrTxHash) {
-                alert('Please enter a valid Ethereum address or transaction hash.');
-                return;
-            }
-
-            if (ethers.utils.isAddress(addressOrTxHash)) {
-                fetchWalletBalance(addressOrTxHash);
-            } else {
-                fetchTransactionDetails(addressOrTxHash);
-            }
-        }
-
-        // Function to fetch wallet balance (ETH and GAPLO token)
-        async function fetchWalletBalance(address) {
-            if (!provider) {
-                alert('Provider not initialized yet');
-                return;
-            }
-
-            try {
-                // Fetch ETH balance
-                const ethBalance = await provider.getBalance(address);
-                const formattedEthBalance = ethers.utils.formatEther(ethBalance);
-
-                // Fetch GAPLO token balance
-                const tokenBalance = await fetchTokenBalance(address, tokenContract.address, tokenContract.decimals);
-
-                // Display the results
-                document.getElementById('result').innerHTML = `
-                    <p><span class="label">Wallet Address:</span> <a href="https://etherscan.io/address/${address}" target="_blank" class="address-link">${address}</a></p>
-                    <p><span class="label">ETH Balance:</span> ${formattedEthBalance} ETH</p>
-                    <p><span class="label">${tokenContract.name} (${tokenContract.symbol}) Balance:</span> ${tokenBalance} ${tokenContract.symbol}</p>
+        if (transactions.length === 0) {
+            transactionList.innerHTML = `<li>No transactions found for this address.</li>`;
+        } else {
+            transactions.forEach(tx => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('transaction-item');
+                listItem.innerHTML = `
+                    <p><strong>Hash:</strong> <a href="https://explorer.aplocoin.com/tx/${tx.hash}" target="_blank">${tx.hash}</a></p>
+                    <p><strong>From:</strong> <a href="https://explorer.aplocoin.com/account/${tx.from}" target="_blank">${tx.from}</a></p>
+                    <p><strong>To:</strong> <a href="https://explorer.aplocoin.com/account/${tx.to}" target="_blank">${tx.to}</a></p>
+                    <p><strong>Amount:</strong> ${ethers.utils.formatEther(tx.value)} GAPLO</p>
                 `;
-            } catch (error) {
-                console.error("Error fetching balance:", error);
-                document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
-            }
+                transactionList.appendChild(listItem);
+            });
         }
+    }
 
-        // Function to fetch ERC-20 token balance
-        async function fetchTokenBalance(address, tokenAddress, decimals) {
-            try {
-                const contractABI = [
-                    "function balanceOf(address owner) view returns (uint256)"
-                ];
+    // Function to fetch GAPLO token balance
+    async function fetchGaploTokenBalance(address) {
+        const gaploAddress = '0x0000000000000000000000000000000000001234'; // GAPLO contract address (replace with the actual one)
+        const gaploAbi = [
+            "function balanceOf(address owner) view returns (uint256)"
+        ];
 
-                // Initialize the ERC-20 contract
-                const contract = new ethers.Contract(tokenAddress, contractABI, provider);
-                
-                // Query the balanceOf function for the specified address
-                const balance = await contract.balanceOf(address);
-                
-                // Return the balance formatted according to the token's decimals
-                return ethers.utils.formatUnits(balance, decimals);
-            } catch (error) {
-                console.error(`Error fetching token balance for ${tokenAddress}:`, error);
-                throw new Error(`Unable to fetch balance for token ${tokenAddress}`);
-            }
+        try {
+            const gaploContract = new ethers.Contract(gaploAddress, gaploAbi, provider);
+            const gaploBalance = await gaploContract.balanceOf(address);
+            const formattedGaploBalance = ethers.utils.formatUnits(gaploBalance, 18); // Adjust decimals if needed
+            document.getElementById('gaplo-balance').innerHTML = `${formattedGaploBalance} GAPLO`;
+        } catch (error) {
+            console.error("Error fetching APLO token balance:", error);
+            document.getElementById('gaplo-balance').innerHTML = 'Error fetching GAPLO balance';
         }
+    }
 
-        // Function to fetch transaction details by hash
-        async function fetchTransactionDetails(txHash) {
-            if (!provider) {
-                alert('Provider not initialized yet');
-                return;
-            }
+    // Event listener for the search button
+    document.getElementById('fetchBalanceBtn').addEventListener('click', fetchBalance);
+</script>
 
-            try {
-                const txDetails = await provider.getTransaction(txHash);
-                
-                if (txDetails) {
-                    document.getElementById('result').innerHTML = `
-                        <p><span class="label">Transaction Hash:</span> <a href="https://etherscan.io/tx/${txHash}" target="_blank" class="address-link">${txHash}</a></p>
-                        <p><span class="label">Block Number:</span> ${txDetails.blockNumber}</p>
-                        <p><span class="label">From:</span> <a href="https://etherscan.io/address/${txDetails.from}" target="_blank" class="address-link">${txDetails.from}</a></p>
-                        <p><span class="label">To:</span> <a href="https://etherscan.io/address/${txDetails.to}" target="_blank" class="address-link">${txDetails.to}</a></p>
-                        <p><span class="label">Value:</span> ${ethers.utils.formatEther(txDetails.value)} ETH</p>
-                    `;
-                } else {
-                    document.getElementById('result').innerHTML = `<p>Transaction not found</p>`;
-                }
-            } catch (error) {
-                console.error("Error fetching transaction:", error);
-                document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
-            }
-        }
-
-        // Attach event listeners
-        document.getElementById('fetchBalanceBtn').addEventListener('click', fetchBalance);
-    </script>
 </body>
-
 </html>
 
