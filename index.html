@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ethereum Block Explorer</title>
+    <title>Aplo Block Explorer</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
     <style>
@@ -70,13 +70,11 @@
             background-color: #45a049;
         }
 
-        .result {
-            margin-top: 20px;
-        }
-
-        .result p {
-            font-size: 18px;
-            line-height: 1.6;
+        .result h3 {
+            color: #2d3748;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
         }
 
         .result .label {
@@ -96,6 +94,31 @@
 
         .result .address-link:hover {
             text-decoration: underline;
+        }
+
+        .block-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .block-item p {
+            margin: 5px 0;
+        }
+
+        .block-item a {
+            color: #4caf50;
+            text-decoration: none;
+        }
+
+        .block-item a:hover {
+            text-decoration: underline;
+        }
+
+        .transaction-item {
+            margin-bottom: 10px;
         }
 
         .footer {
@@ -122,10 +145,6 @@
             font-size: 18px;
             color: #2d3748;
         }
-
-        .transaction-item {
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 
@@ -147,6 +166,10 @@
 
     <!-- Results Section -->
     <div class="result" id="result"></div>
+
+    <!-- Last Blocks Section -->
+    <h3>Last Blocks</h3>
+    <div id="lastBlocks"></div>
 </div>
 
 <div class="footer">
@@ -162,53 +185,36 @@
     // Initialize the provider
     async function initializeProvider() {
         try {
-            if (typeof ethers === 'undefined') {
-                console.error("ethers.js not loaded");
-                alert("ethers.js not loaded");
-                return;
-            }
-
-            console.log("Initializing provider...");
-            provider = new ethers.providers.JsonRpcProvider('https://pub1.aplocoin.com'); // Custom RPC URL
-            console.log("Provider initialized successfully.");
-
-            // Enable the search button once provider is ready
-            document.getElementById('fetchBalanceBtn').disabled = false;
+            provider = new ethers.providers.JsonRpcProvider('https://pub1.aplocoin.com');
+            document.getElementById('fetchBalanceBtn').disabled = false; // Enable search button
+            fetchLastBlocks(); // Fetch last blocks on initialization
         } catch (error) {
-            console.error("Error initializing provider:", error);
             alert("Error initializing provider: " + error.message);
         }
     }
 
-    // Wait until window is fully loaded
     window.onload = async () => {
-        console.log("Window loaded. Initializing provider...");
         await initializeProvider();
     };
 
-    // Function to fetch wallet balance and last 5 transactions
+    // Fetch wallet balance and transactions
     async function fetchBalance() {
-        const input = document.getElementById('addressInput').value;
-        const address = input.trim();
-
-        if (!address) {
+        const input = document.getElementById('addressInput').value.trim();
+        if (!input) {
             alert('Please enter a valid Ethereum address.');
             return;
         }
 
-        if (ethers.utils.isAddress(address)) {
-            // Show the loading message
+        if (ethers.utils.isAddress(input)) {
             document.getElementById('loadingMessage').style.display = 'block';
-            
+
             try {
-                await fetchWalletBalance(address);
-                await fetchGaploTokenBalance(address);
-                await fetchLastTransactions(address);
+                await fetchWalletBalance(input);
+                await fetchGaploTokenBalance(input);
+                await fetchLastTransactions(input);
             } catch (error) {
-                console.error("Error during data fetch:", error);
                 document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
             } finally {
-                // Hide the loading message after fetching the data
                 document.getElementById('loadingMessage').style.display = 'none';
             }
         } else {
@@ -216,114 +222,67 @@
         }
     }
 
-    // Function to fetch wallet balance (GAPLO)
     async function fetchWalletBalance(address) {
-        if (!provider) {
-            alert('Provider not initialized yet');
-            return;
-        }
-
-        try {
-            const ethBalance = await provider.getBalance(address);
-            const formattedEthBalance = ethers.utils.formatEther(ethBalance);
-
-            // Display ETH balance
-            document.getElementById('result').innerHTML = `
-                <p><span class="label">Wallet Address:</span> <a href="https://explorer.aplocoin.com/account/${address}" target="_blank" class="address-link">${address}</a></p>
-                <p><span class="label">Balance:</span> ${formattedEthBalance} GAPLO</p>
-                <h3><span class="label">APLO Token Balance:</span></h3>
-                <p id="gaplo-balance">Loading...</p>
-                <h3><span class="lavel">Last 5 Transactions:</span></h3>
-                <ul id="transaction-list">Loading...</ul>
-            `;
-        } catch (error) {
-            console.error("Error fetching balance:", error);
-            document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
-        }
+        const balance = await provider.getBalance(address);
+        const formattedBalance = ethers.utils.formatEther(balance);
+        document.getElementById('result').innerHTML = `
+            <p><span class="label">Wallet Address:</span> <a href="https://explorer.aplocoin.com/account/${address}" target="_blank">${address}</a></p>
+            <p><span class="label">Balance:</span> ${formattedBalance} GAPLO</p>
+            <h3><span class="label">APLO Token Balance:</span></h3>
+            <p id="gaplo-balance">Loading...</p>
+            <h3><span class="label">Last 5 Transactions:</span></h3>
+            <ul id="transaction-list">Loading...</ul>
+        `;
     }
 
-    // Function to fetch the last 5 transactions of the wallet address with an extended range
-    async function fetchLastTransactions(address) {
-        const latestBlockNumber = await provider.getBlockNumber(); // Get latest block number
-        const txCount = 5; // Number of transactions to fetch
-        const blocksToSearch = 50; // Increase the block range to search more blocks
-        
-        let transactions = [];
-        let startBlock = latestBlockNumber;
-
-        // Fetch transactions from more blocks (increase this number for larger range)
-        for (let i = 0; i < blocksToSearch; i++) {
-            const block = await provider.getBlockWithTransactions(startBlock);
-            
-            block.transactions.forEach(tx => {
-                if (tx.from.toLowerCase() === address.toLowerCase() || tx.to.toLowerCase() === address.toLowerCase()) {
-                    transactions.push(tx);
-                }
-            });
-
-            // Move to previous block
-            startBlock--;
-        }
-
-        // If we still don't have enough transactions, continue searching for older blocks
-        if (transactions.length < txCount) {
-            for (let i = blocksToSearch; i < 20; i++) {
-                const block = await provider.getBlockWithTransactions(startBlock);
-                block.transactions.forEach(tx => {
-                    if (tx.from.toLowerCase() === address.toLowerCase() || tx.to.toLowerCase() === address.toLowerCase()) {
-                        transactions.push(tx);
-                    }
-                });
-                startBlock--;
-                if (transactions.length >= txCount) break;
-            }
-        }
-
-        // Display transactions
-        displayTransactions(transactions.slice(0, txCount)); // Limit to the last 5 transactions
-    }
-
-    // Function to display the transactions in the UI
-    function displayTransactions(transactions) {
-        const transactionList = document.getElementById('transaction-list');
-        transactionList.innerHTML = ''; // Clear any previous transactions
-
-        if (transactions.length === 0) {
-            transactionList.innerHTML = `<li>No transactions found for this address.</li>`;
-        } else {
-            transactions.forEach(tx => {
-                const listItem = document.createElement('li');
-                listItem.classList.add('transaction-item');
-                listItem.innerHTML = `
-                    <p><strong>Hash:</strong> <a href="https://explorer.aplocoin.com/tx/${tx.hash}" target="_blank">${tx.hash}</a></p>
-                    <p><strong>From:</strong> <a href="https://explorer.aplocoin.com/account/${tx.from}" target="_blank">${tx.from}</a></p>
-                    <p><strong>To:</strong> <a href="https://explorer.aplocoin.com/account/${tx.to}" target="_blank">${tx.to}</a></p>
-                    <p><strong>Amount:</strong> ${ethers.utils.formatEther(tx.value)} GAPLO</p>
-                `;
-                transactionList.appendChild(listItem);
-            });
-        }
-    }
-
-    // Function to fetch GAPLO token balance
     async function fetchGaploTokenBalance(address) {
-        const gaploAddress = '0x0000000000000000000000000000000000001235'; // APLO contract address (will replace with the actual one)
-        const gaploAbi = [
-            "function balanceOf(address owner) view returns (uint256)"
-        ];
-
-        try {
-            const gaploContract = new ethers.Contract(gaploAddress, gaploAbi, provider);
-            const gaploBalance = await gaploContract.balanceOf(address);
-            const formattedGaploBalance = ethers.utils.formatUnits(gaploBalance, 18); // Adjust decimals if needed
-            document.getElementById('gaplo-balance').innerHTML = `${formattedGaploBalance} APLO`;
-        } catch (error) {
-            console.error("Error fetching APLO token balance:", error);
-            document.getElementById('gaplo-balance').innerHTML = 'Error fetching GAPLO balance';
-        }
+        const contractAddress = '0x0000000000000000000000000000000000001235'; // Replace with actual contract
+        const abi = ["function balanceOf(address owner) view returns (uint256)"];
+        const contract = new ethers.Contract(contractAddress, abi, provider);
+        const balance = await contract.balanceOf(address);
+        const formattedBalance = ethers.utils.formatUnits(balance, 18);
+        document.getElementById('gaplo-balance').innerHTML = `${formattedBalance} APLO`;
     }
 
-    // Event listener for the search button
+    async function fetchLastTransactions(address) {
+        const blockNumber = await provider.getBlockNumber();
+        let transactions = [];
+        for (let i = 0; i < 50; i++) {
+            const block = await provider.getBlockWithTransactions(blockNumber - i);
+            transactions.push(...block.transactions.filter(tx => tx.from === address || tx.to === address));
+            if (transactions.length >= 5) break;
+        }
+        const txList = document.getElementById('transaction-list');
+        txList.innerHTML = transactions.slice(0, 5).map(tx => `
+            <li class="transaction-item">
+                <p><strong>Hash:</strong> <a href="https://explorer.aplocoin.com/tx/${tx.hash}" target="_blank">${tx.hash}</a></p>
+                <p><strong>From:</strong> ${tx.from}</p>
+                <p><strong>To:</strong> ${tx.to}</p>
+                <p><strong>Amount:</strong> ${ethers.utils.formatEther(tx.value)} GAPLO</p>
+            </li>
+        `).join('');
+    }
+
+    async function fetchLastBlocks() {
+        const blockContainer = document.getElementById('lastBlocks');
+        blockContainer.innerHTML = '<p>Loading last blocks...</p>';
+
+        const latestBlockNumber = await provider.getBlockNumber();
+        let blocks = [];
+        for (let i = 0; i < 10; i++) {
+            blocks.push(await provider.getBlock(latestBlockNumber - i));
+        }
+
+        blockContainer.innerHTML = blocks.map(block => `
+            <div class="block-item">
+                <p><strong>Block Number:</strong> <a href="https://explorer.aplocoin.com/block/${block.number}" target="_blank">${block.number}</a></p>
+                <p><strong>Timestamp:</strong> ${new Date(block.timestamp * 1000).toLocaleString()}</p>
+                <p><strong>Miner:</strong> ${block.miner}</p>
+                <p><strong>Transaction Count:</strong> ${block.transactions.length}</p>
+            </div>
+        `).join('');
+    }
+
     document.getElementById('fetchBalanceBtn').addEventListener('click', fetchBalance);
 </script>
 
