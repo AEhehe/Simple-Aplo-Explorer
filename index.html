@@ -216,7 +216,7 @@
         }
     }
 
-    // Function to fetch wallet balance (ETH)
+    // Function to fetch wallet balance (GAPLO)
     async function fetchWalletBalance(address) {
         if (!provider) {
             alert('Provider not initialized yet');
@@ -307,7 +307,7 @@
 
     // Function to fetch GAPLO token balance
     async function fetchGaploTokenBalance(address) {
-        const gaploAddress = '0x0000000000000000000000000000000000001234'; // GAPLO contract address (replace with the actual one)
+        const gaploAddress = '0x0000000000000000000000000000000000001234'; // APLO contract address (will replace with the actual one)
         const gaploAbi = [
             "function balanceOf(address owner) view returns (uint256)"
         ];
@@ -316,7 +316,7 @@
             const gaploContract = new ethers.Contract(gaploAddress, gaploAbi, provider);
             const gaploBalance = await gaploContract.balanceOf(address);
             const formattedGaploBalance = ethers.utils.formatUnits(gaploBalance, 18); // Adjust decimals if needed
-            document.getElementById('gaplo-balance').innerHTML = `${formattedGaploBalance} GAPLO`;
+            document.getElementById('gaplo-balance').innerHTML = `${formattedGaploBalance} APLO`;
         } catch (error) {
             console.error("Error fetching APLO token balance:", error);
             document.getElementById('gaplo-balance').innerHTML = 'Error fetching GAPLO balance';
