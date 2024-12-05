@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethereum Block Explorer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px;
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .form-group button {
+            width: 100%;
+            padding: 10px;
+            background-color: #4caf50;
+            color: white;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+        }
+
+        .form-group button:hover {
+            background-color: #45a049;
+        }
+
+        .result {
+            margin-top: 20px;
+        }
+
+        .result p {
+            font-size: 16px;
+        }
+
+        .result p span {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Ethereum Block Explorer</h1>
+
+        <!-- Form for Wallet Address or Transaction Hash -->
+        <div class="form-group">
+            <label for="addressInput">Enter Ethereum Address</label>
+            <input type="text" id="addressInput" placeholder="0x...">
+            <button onclick="fetchBalance()">Get Wallet Balance</button>
+        </div>
+
+        <!-- Form for Transaction Hash -->
+        <div class="form-group">
+            <label for="txInput">Enter Transaction Hash</label>
+            <input type="text" id="txInput" placeholder="Transaction Hash">
+            <button onclick="fetchTransactionDetails()">Get Transaction Details</button>
+        </div>
+
+        <!-- Form for Token Balance -->
+        <div class="form-group">
+            <label for="tokenAddressInput">Enter ERC-20 Token Contract Address</label>
+            <input type="text" id="tokenAddressInput" placeholder="Token Contract Address">
+            <button onclick="fetchTokenBalance()">Get Token Balance</button>
+        </div>
+
+        <!-- Display Results -->
+        <div class="result" id="result"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.0/dist/ethers.umd.min.js"></script>
+    <script>
+        // Initialize Ethers.js with custom RPC provider
+        const provider = new ethers.JsonRpcProvider('https://pub1.aplocoin.com');
+
+        // Function to fetch wallet balance
+        async function fetchBalance() {
+            const address = document.getElementById('addressInput').value;
+            if (!ethers.utils.isAddress(address)) {
+                alert('Invalid Ethereum address');
+                return;
+            }
+
+            try {
+                const balance = await provider.getBalance(address);
+                const ethBalance = ethers.formatEther(balance);
+                document.getElementById('result').innerHTML = `
+                    <p><span>Wallet Balance:</span> ${ethBalance} ETH</p>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        // Function to fetch transaction details by hash
+        async function fetchTransactionDetails() {
+            const txHash = document.getElementById('txInput').value;
+            try {
+                const txDetails = await provider.getTransaction(txHash);
+                if (txDetails) {
+                    document.getElementById('result').innerHTML = `
+                        <p><span>Transaction Hash:</span> ${txDetails.hash}</p>
+                        <p><span>Block Number:</span> ${txDetails.blockNumber}</p>
+                        <p><span>From:</span> ${txDetails.from}</p>
+                        <p><span>To:</span> ${txDetails.to}</p>
+                        <p><span>Value:</span> ${ethers.formatEther(txDetails.value)} ETH</p>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = `<p>Transaction not found</p>`;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        // Function to fetch ERC-20 token balance
+        async function fetchTokenBalance() {
+            const address = document.getElementById('addressInput').value;
+            const contractAddress = document.getElementById('tokenAddressInput').value;
+            const contractABI = [
+                "function balanceOf(address owner) view returns (uint256)"
+            ];
+
+            if (!ethers.utils.isAddress(address) || !ethers.utils.isAddress(contractAddress)) {
+                alert('Invalid address or contract address');
+                return;
+            }
+
+            try {
+                const contract = new ethers.Contract(contractAddress, contractABI, provider);
+                const balance = await contract.balanceOf(address);
+                const tokenBalance = ethers.formatUnits(balance, 18); // Assuming 18 decimals
+                document.getElementById('result').innerHTML = `
+                    <p><span>Token Balance:</span> ${tokenBalance} tokens</p>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+
+</html>
