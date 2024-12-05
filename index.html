@@ -80,47 +80,88 @@
         <div class="form-group">
             <label for="addressInput">Enter Ethereum Address</label>
             <input type="text" id="addressInput" placeholder="0x...">
-            <button onclick="fetchBalance()">Get Wallet Balance</button>
+            <button id="fetchBalanceBtn" disabled>Get Wallet Balance</button>
         </div>
 
         <!-- Form for Transaction Hash -->
         <div class="form-group">
             <label for="txInput">Enter Transaction Hash</label>
             <input type="text" id="txInput" placeholder="Transaction Hash">
-            <button onclick="fetchTransactionDetails()">Get Transaction Details</button>
+            <button id="fetchTxBtn" disabled>Get Transaction Details</button>
         </div>
 
         <!-- Form for Token Balance -->
         <div class="form-group">
             <label for="tokenAddressInput">Enter ERC-20 Token Contract Address</label>
             <input type="text" id="tokenAddressInput" placeholder="Token Contract Address">
-            <button onclick="fetchTokenBalance()">Get Token Balance</button>
+            <button id="fetchTokenBtn" disabled>Get Token Balance</button>
         </div>
 
         <!-- Display Results -->
         <div class="result" id="result"></div>
     </div>
 
+    <!-- Include ethers.js library -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.0/dist/ethers.umd.min.js"></script>
+
     <script>
-        // Initialize Ethers.js with custom RPC provider
-        const provider = new ethers.JsonRpcProvider('https://pub1.aplocoin.com');
+        let provider;
+
+        // Function to initialize the provider
+        async function initializeProvider() {
+            try {
+                // Ensure ethers.js is loaded
+                if (typeof ethers === 'undefined') {
+                    console.error("ethers.js not loaded");
+                    alert("ethers.js not loaded");
+                    return;
+                }
+
+                console.log("Initializing provider...");
+                // Initialize Ethers.js with custom RPC provider
+                provider = new ethers.providers.JsonRpcProvider('https://pub1.aplocoin.com');
+                console.log("Provider initialized successfully.");
+
+                // Enable the buttons once provider is ready
+                document.getElementById('fetchBalanceBtn').disabled = false;
+                document.getElementById('fetchTxBtn').disabled = false;
+                document.getElementById('fetchTokenBtn').disabled = false;
+            } catch (error) {
+                console.error("Error initializing provider:", error);
+                alert("Error initializing provider: " + error.message);
+            }
+        }
+
+        // Wait until window is fully loaded
+        window.onload = async () => {
+            console.log("Window loaded. Initializing provider...");
+            await initializeProvider();
+        };
 
         // Function to fetch wallet balance
         async function fetchBalance() {
             const address = document.getElementById('addressInput').value;
+
+            console.log(`Fetching balance for: ${address}`);
             if (!ethers.utils.isAddress(address)) {
                 alert('Invalid Ethereum address');
                 return;
             }
 
+            if (!provider) {
+                alert('Provider not initialized yet');
+                return;
+            }
+
             try {
                 const balance = await provider.getBalance(address);
-                const ethBalance = ethers.formatEther(balance);
+                console.log(`Balance retrieved: ${balance.toString()}`);
+                const ethBalance = ethers.utils.formatEther(balance); // Correct method to format Ether value
                 document.getElementById('result').innerHTML = `
                     <p><span>Wallet Balance:</span> ${ethBalance} ETH</p>
                 `;
             } catch (error) {
+                console.error("Error fetching balance:", error);
                 document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
             }
         }
@@ -128,20 +169,30 @@
         // Function to fetch transaction details by hash
         async function fetchTransactionDetails() {
             const txHash = document.getElementById('txInput').value;
+
+            console.log(`Fetching transaction details for: ${txHash}`);
+            if (!provider) {
+                alert('Provider not initialized yet');
+                return;
+            }
+
             try {
                 const txDetails = await provider.getTransaction(txHash);
                 if (txDetails) {
+                    console.log("Transaction details retrieved:", txDetails);
                     document.getElementById('result').innerHTML = `
                         <p><span>Transaction Hash:</span> ${txDetails.hash}</p>
                         <p><span>Block Number:</span> ${txDetails.blockNumber}</p>
                         <p><span>From:</span> ${txDetails.from}</p>
                         <p><span>To:</span> ${txDetails.to}</p>
-                        <p><span>Value:</span> ${ethers.formatEther(txDetails.value)} ETH</p>
+                        <p><span>Value:</span> ${ethers.utils.formatEther(txDetails.value)} ETH</p> <!-- Correct formatting -->
                     `;
                 } else {
+                    console.log("Transaction not found");
                     document.getElementById('result').innerHTML = `<p>Transaction not found</p>`;
                 }
             } catch (error) {
+                console.error("Error fetching transaction:", error);
                 document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
             }
         }
@@ -150,6 +201,10 @@
         async function fetchTokenBalance() {
             const address = document.getElementById('addressInput').value;
             const contractAddress = document.getElementById('tokenAddressInput').value;
+
+            console.log(`Fetching token balance for address: ${address} and contract: ${contractAddress}`);
+
+            // ERC-20 token balance function ABI
             const contractABI = [
                 "function balanceOf(address owner) view returns (uint256)"
             ];
@@ -159,18 +214,31 @@
                 return;
             }
 
+            if (!provider) {
+                alert('Provider not initialized yet');
+                return;
+            }
+
             try {
                 const contract = new ethers.Contract(contractAddress, contractABI, provider);
                 const balance = await contract.balanceOf(address);
-                const tokenBalance = ethers.formatUnits(balance, 18); // Assuming 18 decimals
+                console.log("Token balance retrieved:", balance.toString());
+                const tokenBalance = ethers.utils.formatUnits(balance, 18); // Assuming 18 decimals for the token
                 document.getElementById('result').innerHTML = `
                     <p><span>Token Balance:</span> ${tokenBalance} tokens</p>
                 `;
             } catch (error) {
+                console.error("Error fetching token balance:", error);
                 document.getElementById('result').innerHTML = `<p>Error: ${error.message}</p>`;
             }
         }
+
+        // Attach event listeners after provider is initialized
+        document.getElementById('fetchBalanceBtn').addEventListener('click', fetchBalance);
+        document.getElementById('fetchTxBtn').addEventListener('click', fetchTransactionDetails);
+        document.getElementById('fetchTokenBtn').addEventListener('click', fetchTokenBalance);
     </script>
 </body>
 
 </html>
+
